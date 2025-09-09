@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>User Details</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+</head>
+<body>
+  <div class="container mt-5" style="max-width: 600px;">
+    <h2>User Details</h2>
+    <div id="alert-placeholder"></div>
+
+    <form id="userForm">
+      <input type="hidden" id="userId" />
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input type="text" id="username" class="form-control" disabled />
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" id="email" class="form-control" disabled />
+      </div>
+      <div class="mb-3">
+        <label class="form-label">First Name</label>
+        <input type="text" id="firstName" class="form-control" disabled />
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Last Name</label>
+        <input type="text" id="lastName" class="form-control" disabled />
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Role</label>
+        <select id="role" class="form-select" disabled>
+          <option value="user">User</option>
+          <option value="moderator">Moderator</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Status</label>
+        <select id="status" class="form-select" disabled>
+          <option value="new">New</option>
+          <option value="active">Active</option>
+        </select>
+      </div>
+
+      <div id="adminControls" style="display:none;">
+        <button type="button" id="editBtn" class="btn btn-warning w-100 mb-2">Edit</button>
+        <button type="submit" id="saveBtn" class="btn btn-success w-100 mb-2" style="display:none;">Save Changes</button>
+        <button type="button" id="deleteBtn" class="btn btn-danger w-100 mb-2">Delete User</button>
+      </div>
+      
+      <div id="userControls" style="display:none;">
+        <button type="button" id="editProfileBtn" class="btn btn-warning w-100 mb-2">Edit Profile</button>
+        <button type="submit" id="saveProfileBtn" class="btn btn-success w-100 mb-2" style="display:none;">Save Changes</button>
+      </div>
+    </form>
+
+    <p class="mt-3"><a href="main.html">← Back to user list</a></p>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('id');
+    const token = localStorage.getItem('token');
+    let currentUser = null;
+    let isViewingOwnProfile = false;
+
+    if (!token) window.location.href = 'login.html';
+
+    // Get current user info first
+    $.ajax({
+      url: 'http://localhost:5000/me',
+      method: 'GET',
+      headers: { Authorization: 'Bearer ' + token },
+      success: function(user) {
+        currentUser = user;
+        isViewingOwnProfile = userId == user._id;
+        
+        // Show appropriate controls
+        if (user.role === 'admin' && !isViewingOwnProfile) {
+          $('#adminControls').show();
+        } else if (isViewingOwnProfile) {
+          $('#userControls').show();
+        }
+        
+        // Now fetch the user being viewed
+        fetchUserDetails();
+      },
+      error: function() {
+        window.location.href = 'login.html';
+      }
+    });
+
+    function fetchUserDetails() {
+      if (!userId) {
+        $('#alert-placeholder').html('<div class="alert alert-danger">No user ID provided</div>');
+        return;
+      }
+
+      $.ajax({
+        url: `http://localhost:5000/users/${userId}`,
+        method: 'GET',
+        headers: { Authorization: 'Bearer ' + token },
+        success: function(user) {
+          $('#userId').val(user._id);
+          $('#username').val(user.username);
+          $('#email').val(user.email);
+          $('#firstName').val(user.firstName);
+          $('#lastName').val(user.lastName);
+          $('#role').val(user.role);
+          $('#status').val(user.status);
+        },
+        error: function() {
+          $('#alert-placeholder').html('<div class="alert alert-danger">Failed to load user</div>');
+        }
+      });
+    }
+
+    // Admin edit functionality
+    $('#editBtn').click(function() {
+      $('#userForm input:not(#userId), #userForm select').prop('disabled', false);
+      $('#editBtn').hide();
+      $('#saveBtn').show();
+    });
+
+    // User profile edit functionality  
+    $('#editProfileBtn').click(function() {
+      $('#username, #email, #firstName, #lastName').prop('disabled', false);
+      // Keep role and status disabled for users
+      $('#editProfileBtn').hide();
+      $('#saveProfileBtn').show();
+    });
+
+    // Save changes (admin)
+    $('#userForm').submit(function(e) {
+      e.preventDefault();
+      
+      const updatedUser = {
+        username: $('#username').val(),
+        email: $('#email').val(),
+        firstName: $('#firstName').val(),
+        lastName: $('#lastName').val(),
+        role: $('#role').val(),
+        status: $('#status').val()
+      };
+
+      const url = isViewingOwnProfile ? 
+        'http://localhost:5000/me' : 
+        `http://localhost:5000/users/${userId}`;
+        
+      const method = 'PUT';
+
+      $.ajax({
+        url: url,
+        method: method,
+        headers: { Authorization: 'Bearer ' + token },
+        contentType: 'application/json',
+        data: JSON.stringify(updatedUser),
+        success: function() {
+          $('#alert-placeholder').html('<div class="alert alert-success">Changes saved</div>');
+          $('#userForm input, #userForm select').prop('disabled', true);
+          $('#saveBtn, #saveProfileBtn').hide();
+          $('#editBtn, #editProfileBtn').show();
+        },
+        error: function(xhr) {
+          const err = xhr.responseJSON?.error || 'Failed to save changes';
+          $('#alert-placeholder').html(`<div class="alert alert-danger">${err}</div>`);
+        }
+      });
+    });
+
+    // Delete user (admin only)
+    $('#deleteBtn').click(function() {
+      if (!confirm('Are you sure you want to delete this user?')) return;
+      $.ajax({
+        url: `http://localhost:5000/users/${userId}`,
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer ' + token },
+        success: function() {
+          window.location.href = 'main.html';
+        },
+        error: function() {
+          $('#alert-placeholder').html('<div class="alert alert-danger">Failed to delete user</div>');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
