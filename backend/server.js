@@ -1,4 +1,5 @@
 // Imports & Setup
+const axios = require('axios');
 const express = require('express');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
@@ -194,7 +195,28 @@ app.patch('/users/:id/status', authenticate, async (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found or already active' });
   res.json({ message: 'User activated', user });
 });
+// SSRF Vulnerable Route
+app.get('/api/fetch-data', authenticate, async (req, res) => {
+    const { url } = req.query;
 
+    if (!url) {
+        return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    try {
+        // VULNERABILITY: The server fetches any URL provided by the user without validation
+        const response = await axios.get(url);
+        res.json({
+            status: "Success",
+            data: response.data
+        });
+    } catch (err) {
+        res.status(500).json({ 
+            error: 'SSRF Fetch Error', 
+            message: err.message 
+        });
+    }
+});
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
